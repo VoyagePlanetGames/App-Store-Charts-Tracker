@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>App Store Charts Tracker — Chen Builds</title>
+<meta name="description" content="Live App Store top charts across countries, powered by Apple's RSS feed. Day 96 of 100 Days of Code." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕹️</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #07070f;
+    --bg-2: #0d0d1c;
+    --panel: rgba(20, 20, 38, 0.72);
+    --panel-line: rgba(120, 130, 200, 0.16);
+    --ink: #eef0ff;
+    --ink-dim: #9aa0c8;
+    --ink-faint: #5b6090;
+    --cyan: #00f0ff;
+    --magenta: #ff2d9b;
+    --amber: #ffb800;
+    --lime: #8cff5a;
+    --radius: 18px;
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: "Hanken Grotesk", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Atmospheric arcade-bokeh background */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background:
+      radial-gradient(closest-side at 12% 18%, rgba(255, 45, 155, 0.22), transparent),
+      radial-gradient(closest-side at 88% 12%, rgba(0, 240, 255, 0.20), transparent),
+      radial-gradient(closest-side at 78% 82%, rgba(255, 184, 0, 0.16), transparent),
+      radial-gradient(closest-side at 22% 88%, rgba(140, 255, 90, 0.12), transparent),
+      linear-gradient(160deg, var(--bg-2), var(--bg));
+  }
+  /* Grain overlay */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
+
+  /* ---------- HEADER ---------- */
+  header {
+    padding: 54px 0 34px;
+    text-align: center;
+    position: relative;
+  }
+
+  .avatar-ring {
+    width: 124px; height: 124px;
+    margin: 0 auto 22px;
+    border-radius: 50%;
+    padding: 4px;
+    background: conic-gradient(from 210deg, var(--cyan), var(--magenta), var(--amber), var(--cyan));
+    box-shadow: 0 0 40px rgba(255, 45, 155, 0.35), 0 0 70px rgba(0, 240, 255, 0.2);
+    animation: spin 14s linear infinite, floaty 6s ease-in-out infinite;
+  }
+  .avatar-ring img {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--bg);
+    display: block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes floaty { 0%,100% { translate: 0 0; } 50% { translate: 0 -7px; } }
+  /* counter-rotate the photo so the face stays upright while the ring spins */
+  .avatar-ring img { animation: spin-rev 14s linear infinite; }
+  @keyframes spin-rev { to { transform: rotate(-360deg); } }
+
+  .kicker {
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 14px;
+    opacity: 0;
+    animation: rise 0.7s 0.05s forwards;
+  }
+
+  h1 {
+    font-family: "Syne", sans-serif;
+    font-weight: 800;
+    font-size: clamp(2.4rem, 6.5vw, 4.6rem);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: rise 0.7s 0.12s forwards;
+  }
+  h1 .charts {
+    background: linear-gradient(100deg, var(--magenta), var(--amber));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .tagline {
+    color: var(--ink-dim);
+    max-width: 580px;
+    margin: 18px auto 0;
+    font-size: 1.02rem;
+    opacity: 0;
+    animation: rise 0.7s 0.2s forwards;
+  }
+
+  .header-actions {
+    margin-top: 26px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: rise 0.7s 0.28s forwards;
+  }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: "Space Mono", monospace;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    padding: 12px 20px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-line);
+    color: var(--ink);
+    background: var(--panel);
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .btn:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 8px 26px rgba(0, 240, 255, 0.18); }
+
+  .btn-coffee {
+    background: linear-gradient(100deg, var(--amber), #ff8a3d);
+    color: #1a0e00;
+    border: none;
+    box-shadow: 0 8px 24px rgba(255, 184, 0, 0.32);
+  }
+  .btn-coffee:hover { box-shadow: 0 12px 32px rgba(255, 184, 0, 0.5); border: none; }
+
+  /* ---------- CONTROLS ---------- */
+  .controls {
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin: 14px 0 30px;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+  }
+  .field { display: flex; flex-direction: column; gap: 7px; }
+  .field label {
+    font-family: "Space Mono", monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  select {
+    appearance: none;
+    font-family: "Hanken Grotesk", sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: rgba(10, 10, 22, 0.85);
+    border: 1px solid var(--panel-line);
+    border-radius: 11px;
+    padding: 11px 38px 11px 14px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300f0ff' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    transition: border-color 0.16s ease;
+  }
+  select:focus { outline: none; border-color: var(--cyan); }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    padding-bottom: 11px;
+  }
+  .toggle input { display: none; }
+  .switch {
+    width: 46px; height: 26px;
+    border-radius: 999px;
+    background: rgba(10, 10, 22, 0.85);
+    border: 1px solid var(--panel-line);
+    position: relative;
+    transition: background 0.2s ease;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--ink-dim);
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+  .toggle input:checked + .switch { background: rgba(140, 255, 90, 0.22); border-color: var(--lime); }
+  .toggle input:checked + .switch::after { transform: translateX(20px); background: var(--lime); }
+  .toggle .toggle-label {
+    font-family: "Space Mono", monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .controls .spacer { flex: 1 1 auto; }
+
+  /* ---------- STATUS BAR ---------- */
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .feed-title {
+    font-family: "Syne", sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    letter-spacing: -0.01em;
+  }
+  .feed-meta {
+    font-family: "Space Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+  }
+
+  /* ---------- LIST ---------- */
+  #list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
+
+  .card {
+    display: grid;
+    grid-template-columns: 56px 64px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 15px;
+    padding: 12px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    animation: rise 0.5s backwards;
+  }
+  .card:hover {
+    transform: translateX(6px);
+    border-color: var(--cyan);
+    background: rgba(0, 240, 255, 0.05);
+  }
+  .rank {
+    font-family: "Space Mono", monospace;
+    font-weight: 700;
+    font-size: 1.5rem;
+    text-align: center;
+    color: var(--ink-faint);
+  }
+  .card:nth-child(1) .rank { color: var(--amber); }
+  .card:nth-child(2) .rank { color: var(--cyan); }
+  .card:nth-child(3) .rank { color: var(--magenta); }
+  .art {
+    width: 64px; height: 64px;
+    border-radius: 14px;
+    background: #1a1a2e;
+    object-fit: cover;
+    border: 1px solid var(--panel-line);
+  }
+  .meta { min-width: 0; }
+  .meta .name {
+    font-family: "Syne", sans-serif;
+    font-weight: 700;
+    font-size: 1.06rem;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meta .dev {
+    color: var(--ink-dim);
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chips { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .chip {
+    font-family: "Space Mono", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-line);
+    color: var(--ink-dim);
+  }
+  .chip.game { color: var(--lime); border-color: rgba(140, 255, 90, 0.4); }
+  .go {
+    font-family: "Space Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .card:hover .go { color: var(--cyan); }
+
+  /* ---------- STATES ---------- */
+  .state {
+    text-align: center;
+    padding: 64px 20px;
+    color: var(--ink-dim);
+  }
+  .state .big { font-family: "Syne", sans-serif; font-size: 1.4rem; color: var(--ink); margin-bottom: 8px; }
+  .spinner {
+    width: 42px; height: 42px;
+    margin: 0 auto 20px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top-color: var(--cyan);
+    animation: spin 0.8s linear infinite;
+  }
+  .skeleton {
+    height: 88px;
+    border-radius: 15px;
+    background: linear-gradient(100deg, rgba(255,255,255,0.03) 30%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ---------- FOOTER ---------- */
+  footer {
+    margin: 50px 0 40px;
+    padding-top: 26px;
+    border-top: 1px solid var(--panel-line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    color: var(--ink-faint);
+    font-family: "Space Mono", monospace;
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+  }
+  footer a { color: var(--ink-dim); text-decoration: none; border-bottom: 1px dashed var(--ink-faint); }
+  footer a:hover { color: var(--cyan); border-color: var(--cyan); }
+
+  @media (max-width: 620px) {
+    .card { grid-template-columns: 40px 56px 1fr; gap: 12px; padding: 12px; }
+    .art { width: 56px; height: 56px; }
+    .go { display: none; }
+    .controls { gap: 12px; }
+    .field { flex: 1 1 140px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="avatar-ring">
+      <img src="assets/chen.jpeg" alt="Chen — builder of this tracker" />
+    </div>
+    <div class="kicker">Day 96 · 100 Days of Code</div>
+    <h1>App Store <span class="charts">Charts</span> Tracker</h1>
+    <p class="tagline">Live top-app rankings straight from Apple's official RSS feed — flip between countries, free vs. paid, and a games-only lens. Built by Chen.</p>
+    <div class="header-actions">
+      <a class="btn btn-coffee" href="https://buymeacoffee.com/chenbuilds" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+      <a class="btn" href="https://github.com/VoyagePlanetGames/App-Store-Charts-Tracker" target="_blank" rel="noopener">★ View on GitHub</a>
+    </div>
+  </header>
+
+  <section class="controls">
+    <div class="field">
+      <label for="country">Storefront</label>
+      <select id="country">
+        <option value="us">🇺🇸 United States</option>
+        <option value="gb">🇬🇧 United Kingdom</option>
+        <option value="jp">🇯🇵 Japan</option>
+        <option value="kr">🇰🇷 South Korea</option>
+        <option value="cn">🇨🇳 China</option>
+        <option value="de">🇩🇪 Germany</option>
+        <option value="fr">🇫🇷 France</option>
+        <option value="ca">🇨🇦 Canada</option>
+        <option value="au">🇦🇺 Australia</option>
+        <option value="br">🇧🇷 Brazil</option>
+        <option value="in">🇮🇳 India</option>
+        <option value="se">🇸🇪 Sweden</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="feed">Chart</label>
+      <select id="feed">
+        <option value="top-free">Top Free</option>
+        <option value="top-paid">Top Paid</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="limit">Show</label>
+      <select id="limit">
+        <option value="25">Top 25</option>
+        <option value="50" selected>Top 50</option>
+        <option value="100">Top 100</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <label class="toggle" for="gamesOnly">
+      <input type="checkbox" id="gamesOnly" />
+      <span class="switch"></span>
+      <span class="toggle-label">🎮 Games only</span>
+    </label>
+  </section>
+
+  <div class="statusbar">
+    <div class="feed-title" id="feedTitle">Loading charts…</div>
+    <div class="feed-meta" id="feedMeta"></div>
+  </div>
+
+  <main id="list"></main>
+
+  <footer>
+    <span id="updated">— · 100 Days of Code · Day 96</span>
+    <span>Data: Apple Marketing Tools RSS · <a href="https://buymeacoffee.com/chenbuilds" target="_blank" rel="noopener">support this build</a></span>
+  </footer>
+
+</div>
+
+<script>
+  const API_BASE = "https://rss.applemarketingtools.com/api/v2";
+  const GAMES_GENRE_ID = "6014";
+
+  const els = {
+    country: document.getElementById("country"),
+    feed: document.getElementById("feed"),
+    limit: document.getElementById("limit"),
+    gamesOnly: document.getElementById("gamesOnly"),
+    list: document.getElementById("list"),
+    feedTitle: document.getElementById("feedTitle"),
+    feedMeta: document.getElementById("feedMeta"),
+    updated: document.getElementById("updated"),
+  };
+
+  const FEED_LABEL = { "top-free": "Top Free", "top-paid": "Top Paid" };
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // Apple serves 100px art; swap for a crisper 256px version when available.
+  function upscaleArt(url) {
+    return url ? url.replace(/\/\d+x\d+bb\.(png|jpg|jpeg)/, "/256x256bb.$1") : "";
+  }
+
+  function isGame(app) {
+    return (app.genres || []).some(g => g.genreId === GAMES_GENRE_ID || g.name === "Games");
+  }
+
+  function showSkeletons(n = 8) {
+    els.list.innerHTML = Array.from({ length: n })
+      .map(() => '<div class="skeleton"></div>').join("");
+  }
+
+  function render(apps) {
+    if (!apps.length) {
+      els.list.innerHTML = '<div class="state"><div class="big">No matches</div>'
+        + 'Nothing fits this filter — try turning off “Games only” or switching storefront.</div>';
+      return;
+    }
+    els.list.innerHTML = apps.map((app, i) => {
+      const game = isGame(app);
+      const genre = (app.genres && app.genres[0]) ? app.genres[0].name : "App";
+      const chips = `<span class="chip${game ? " game" : ""}">${escapeHtml(genre)}</span>`
+        + (app.releaseDate ? `<span class="chip">${escapeHtml(app.releaseDate)}</span>` : "");
+      return `
+        <a class="card" href="${escapeHtml(app.url)}" target="_blank" rel="noopener" style="animation-delay:${i * 22}ms">
+          <div class="rank">${i + 1}</div>
+          <img class="art" loading="lazy" src="${escapeHtml(upscaleArt(app.artworkUrl100))}" alt="" />
+          <div class="meta">
+            <div class="name">${escapeHtml(app.name)}</div>
+            <div class="dev">${escapeHtml(app.artistName)}</div>
+            <div class="chips">${chips}</div>
+          </div>
+          <div class="go">OPEN ↗</div>
+        </a>`;
+    }).join("");
+  }
+
+  async function load() {
+    const cc = els.country.value;
+    const feed = els.feed.value;
+    const limit = els.limit.value;
+    const gamesOnly = els.gamesOnly.checked;
+
+    els.feedTitle.textContent = "Loading charts…";
+    els.feedMeta.textContent = "";
+    showSkeletons();
+
+    const url = `${API_BASE}/${cc}/apps/${feed}/${limit}/apps.json`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      let results = (data.feed && data.feed.results) ? data.feed.results : [];
+
+      if (gamesOnly) results = results.filter(isGame);
+
+      const countryName = els.country.options[els.country.selectedIndex].text;
+      els.feedTitle.textContent =
+        `${FEED_LABEL[feed]}${gamesOnly ? " Games" : " Apps"} · ${countryName}`;
+      els.feedMeta.textContent =
+        `${results.length} ranked · source: Apple RSS`;
+      els.updated.textContent =
+        `Updated ${new Date().toLocaleString()} · Day 96`;
+
+      render(results);
+    } catch (err) {
+      els.feedTitle.textContent = "Couldn’t load charts";
+      els.feedMeta.textContent = "";
+      els.list.innerHTML = '<div class="state"><div class="big">Request failed</div>'
+        + 'Apple’s RSS feed didn’t respond. Check your connection or try a different storefront.<br>'
+        + '<span style="font-family:\'Space Mono\',monospace;font-size:.72rem;color:var(--ink-faint)">'
+        + escapeHtml(err.message) + '</span></div>';
+    }
+  }
+
+  [els.country, els.feed, els.limit, els.gamesOnly].forEach(el =>
+    el.addEventListener("change", load));
+
+  load();
+</script>
+</body>
+</html>
