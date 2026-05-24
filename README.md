@@ -26,7 +26,9 @@ https://rss.applemarketingtools.com/api/v2/{country}/apps/{feed}/{limit}/apps.js
 - `{feed}` — `top-free` or `top-paid`
 - `{limit}` — number of results
 
-Each result includes `name`, `artistName`, `artworkUrl100`, `genres[]`, `releaseDate`, and `url`. Because it's served with `Access-Control-Allow-Origin: *`, the call works directly from a static page — perfect for GitHub Pages.
+Each result includes `name`, `artistName`, `artworkUrl100`, `genres[]`, `releaseDate`, and `url`.
+
+**CORS note:** Apple's RSS endpoint does **not** send `Access-Control-Allow-Origin` headers, so a static page (like GitHub Pages) can't call it directly — the browser blocks it with a "Load failed" error. The app tries the direct call first, then falls back through public CORS proxies (`allorigins`, `corsproxy.io`, `thingproxy`) until one succeeds. For a production tool you'd run your own tiny proxy or cache the feed server-side.
 
 ## Run locally
 

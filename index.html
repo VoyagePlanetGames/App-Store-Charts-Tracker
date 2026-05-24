@@ -501,6 +501,27 @@
     return (app.genres || []).some(g => g.genreId === GAMES_GENRE_ID || g.name === "Games");
   }
 
+  // Apple's RSS feed does NOT send CORS headers, so a static page can't call it
+  // directly. We try direct first (fast/future-proof), then fall back through
+  // public CORS proxies until one returns JSON.
+  async function fetchJson(target) {
+    const strategies = [
+      u => u,
+      u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+      u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+      u => "https://thingproxy.freeboard.io/fetch/" + u,
+    ];
+    let lastErr;
+    for (const make of strategies) {
+      try {
+        const res = await fetch(make(target), { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error("All fetch strategies failed");
+  }
+
   function showSkeletons(n = 8) {
     els.list.innerHTML = Array.from({ length: n })
       .map(() => '<div class="skeleton"></div>').join("");
@@ -544,9 +565,7 @@
     const url = `${API_BASE}/${cc}/apps/${feed}/${limit}/apps.json`;
 
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
+      const data = await fetchJson(url);
       let results = (data.feed && data.feed.results) ? data.feed.results : [];
 
       if (gamesOnly) results = results.filter(isGame);
