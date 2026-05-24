@@ -14,17 +14,25 @@ Day 96 of my 100 Days of Code. A single-page web app that pulls **live App Store
 - Ranked leaderboard with artwork, developer, genre chips, and a deep-link to each App Store listing.
 - Loading skeletons, empty-state and error handling.
 
-## The API
+## The API — two Apple feeds
 
-Apple's free, no-key, CORS-enabled RSS generator:
+Apple exposes two free, no-key RSS feeds, and this app uses both because they have different strengths:
 
+**Modern (v2)** — used for plain Top Free / Top Paid:
 ```
 https://rss.applemarketingtools.com/api/v2/{country}/apps/{feed}/{limit}/apps.json
 ```
+Clean JSON, but **only** serves overall free/paid charts and its genre data is too thin to reliably isolate games.
 
-- `{country}` — ISO storefront code, e.g. `us`, `gb`, `jp`, `cn`
-- `{feed}` — `top-free` or `top-paid`
-- `{limit}` — number of results
+**Legacy** — used for Games-only and Top Grossing:
+```
+https://itunes.apple.com/{country}/rss/{slug}/limit={n}[/genre=6014]/json
+```
+- `{slug}` — `topfreeapplications`, `toppaidapplications`, or `topgrossingapplications`
+- `genre=6014` — native filter that returns **top games directly** (no guesswork)
+- adds **Top Grossing**, which v2 doesn't offer
+
+`{country}` is an ISO storefront code (`us`, `gb`, `jp`, `cn`, …). The two feeds use slightly different JSON shapes, so the app normalizes both into one app object before rendering.
 
 Each result includes `name`, `artistName`, `artworkUrl100`, `genres[]`, `releaseDate`, and `url`.
 

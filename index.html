@@ -438,6 +438,7 @@
       <select id="feed">
         <option value="top-free">Top Free</option>
         <option value="top-paid">Top Paid</option>
+        <option value="top-grossing">Top Grossing</option>
       </select>
     </div>
     <div class="field">
@@ -471,8 +472,15 @@
 </div>
 
 <script>
-  const API_BASE = "https://rss.applemarketingtools.com/api/v2";
+  const V2_BASE = "https://rss.applemarketingtools.com/api/v2";   // modern feed: free/paid only
+  const LEGACY_BASE = "https://itunes.apple.com";                 // legacy feed: supports genre + grossing
   const GAMES_GENRE_ID = "6014";
+  // chart value -> legacy RSS feed slug
+  const LEGACY_SLUG = {
+    "top-free": "topfreeapplications",
+    "top-paid": "toppaidapplications",
+    "top-grossing": "topgrossingapplications",
+  };
 
   const els = {
     country: document.getElementById("country"),
@@ -485,7 +493,7 @@
     updated: document.getElementById("updated"),
   };
 
-  const FEED_LABEL = { "top-free": "Top Free", "top-paid": "Top Paid" };
+  const FEED_LABEL = { "top-free": "Top Free", "top-paid": "Top Paid", "top-grossing": "Top Grossing" };
 
   function escapeHtml(s) {
     return String(s ?? "").replace(/[&<>"']/g, c =>
@@ -499,6 +507,29 @@
 
   function isGame(app) {
     return (app.genres || []).some(g => g.genreId === GAMES_GENRE_ID || g.name === "Games");
+  }
+
+  // ---- normalizers: collapse both feed shapes into one app object ----
+  function fromV2(data) {
+    return (data.feed && data.feed.results) ? data.feed.results : [];
+  }
+  function fromLegacy(data) {
+    let entries = data && data.feed && data.feed.entry;
+    if (!entries) return [];
+    if (!Array.isArray(entries)) entries = [entries];          // single result isn't wrapped in an array
+    return entries.map(e => {
+      const imgs = e["im:image"] || [];
+      const cat = (e.category && e.category.attributes) || {};
+      const rel = e["im:releaseDate"] || {};
+      return {
+        name: e["im:name"] && e["im:name"].label,
+        artistName: e["im:artist"] && e["im:artist"].label,
+        artworkUrl100: imgs.length ? imgs[imgs.length - 1].label : "",
+        url: e.id && e.id.label,
+        releaseDate: (rel.attributes && rel.attributes.label) || "",
+        genres: cat.label ? [{ genreId: cat["im:id"], name: cat.label }] : [],
+      };
+    });
   }
 
   // Apple's RSS feed does NOT send CORS headers, so a static page can't call it
@@ -562,13 +593,16 @@
     els.feedMeta.textContent = "";
     showSkeletons();
 
-    const url = `${API_BASE}/${cc}/apps/${feed}/${limit}/apps.json`;
+    // v2 only serves overall free/paid charts. Games filtering and Top Grossing
+    // are only available on the legacy feed (which accepts a native genre param).
+    const useLegacy = gamesOnly || feed === "top-grossing";
+    const url = useLegacy
+      ? `${LEGACY_BASE}/${cc}/rss/${LEGACY_SLUG[feed]}/limit=${limit}${gamesOnly ? "/genre=" + GAMES_GENRE_ID : ""}/json`
+      : `${V2_BASE}/${cc}/apps/${feed}/${limit}/apps.json`;
 
     try {
       const data = await fetchJson(url);
-      let results = (data.feed && data.feed.results) ? data.feed.results : [];
-
-      if (gamesOnly) results = results.filter(isGame);
+      const results = useLegacy ? fromLegacy(data) : fromV2(data);
 
       const countryName = els.country.options[els.country.selectedIndex].text;
       els.feedTitle.textContent =
